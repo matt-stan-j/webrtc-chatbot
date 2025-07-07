@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Chatbot Test</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/amazon-kinesis-video-streams-webrtc/dist/kvs-webrtc.min.js"></script>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1.24.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>WebRTC Knowledge Base Chatbot</h1>
+        
+        <!-- Video Container -->
+        <div class="video-container">
+            <div class="video-wrapper">
+                <video id="localVideo" autoplay muted playsinline></video>
+                <label>Your Video</label>
+            </div>
+            <div class="video-wrapper">
+                <video id="remoteVideo" autoplay playsinline></video>
+                <label>Remote Video</label>
+            </div>
+        </div>
+        
+        <!-- Chat Container -->
+        <div class="chat-container">
+            <div id="chatDisplay" class="chat-display"></div>
+            
+            <!-- Input Controls -->
+            <div class="input-container">
+                <input type="text" id="messageInput" placeholder="Type your message..." />
+                <button id="sendButton">Send</button>
+            </div>
+        </div>
+        
+        <!-- WebRTC Controls -->
+        <div class="controls">
+            <button id="startCallButton" class="btn-primary">Start WebRTC Call</button>
+            <button id="endCallButton" class="btn-secondary" disabled>End Call</button>
+            <label>
+                <input type="checkbox" id="showCitations" checked> Show Citations
+            </label>
+        </div>
+        
+        <!-- Status Display -->
+        <div class="status-container">
+            <div id="connectionStatus">Status: Ready</div>
+            <div id="sessionInfo">Session: Not started</div>
+        </div>
+    </div>
+    
+    <script src="config.js"></script>
+    <script src="webrtc-client.js"></script>
+</body>
+</html>

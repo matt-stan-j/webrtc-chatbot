@@ -2,35 +2,104 @@ class WebRTCChatbot {
     constructor() {
         this.config = window.WEBRTC_CONFIG;
         this.sessionId = this.generateUUID();
-        this.peerConnection = null;
-        this.dataChannel = null;
-        this.signalingClient = null;
-        this.isConnected = false;
-        
-        this.initializeAWS();
         this.setupEventListeners();
-        this.updateStatus('Ready');
-    }
-    
-    initializeAWS() {
-        AWS.config.region = this.config.AWS_REGION;
-        AWS.config.credentials = new AWS.CognitoIdentityCredentials({
-            IdentityPoolId: this.config.IDENTITY_POOL_ID
-        });
+        
+        console.log('WebRTC Chatbot initialized');
+        console.log('Config:', this.config);
+        console.log('Session ID:', this.sessionId);
     }
     
     setupEventListeners() {
-        document.getElementById('startCallButton').addEventListener('click', () => this.startCall());
-        document.getElementById('endCallButton').addEventListener('click', () => this.endCall());
-        document.getElementById('sendButton').addEventListener('click', () => this.sendMessage());
-        document.getElementById('messageInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.sendMessage();
-        });
+        const sendButton = document.getElementById('sendButton');
+        const messageInput = document.getElementById('messageInput');
+        
+        if (sendButton) {
+            sendButton.addEventListener('click', () => this.sendMessage());
+        }
+        
+        if (messageInput) {
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.sendMessage();
+            });
+        }
+        
+        console.log('Event listeners set up');
     }
     
-    updateStatus(status) {
-        document.getElementById('connectionStatus').textContent = `Status: ${status}`;
-        document.getElementById('sessionInfo').textContent = `Session: ${this.sessionId.substring(0, 8)}...`;
+    async sendMessage() {
+        const input = document.getElementById('messageInput');
+        const message = input.value.trim();
+        
+        console.log('Send message called with:', message);
+        
+        if (!message) {
+            console.log('Empty message, returning');
+            return;
+        }
+        
+        // Show user message
+        this.addChatMessage('You', message);
+        input.value = '';
+        
+        // Disable send button
+        const sendButton = document.getElementById('sendButton');
+        sendButton.disabled = true;
+        sendButton.textContent = 'Sending...';
+        
+        try {
+            const url = `${this.config.API_GATEWAY_URL}/chat`;
+            console.log('Sending request to:', url);
+            
+            const requestBody = {
+                text: message,
+                session_id: this.sessionId
+            };
+            console.log('Request body:', requestBody);
+            
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+            
+            console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            console.log('Response data:', data);
+            
+            // Handle the response
+            const botMessage = data.message || 'No response received';
+            this.addChatMessage('Bot', botMessage);
+            
+        } catch (error) {
+            console.error('Send message error:', error);
+            this.addChatMessage('System', `Error: ${error.message}`);
+        } finally {
+            // Re-enable send button
+            sendButton.disabled = false;
+            sendButton.textContent = 'Send';
+        }
+    }
+    
+    addChatMessage(speaker, message) {
+        const chatDisplay = document.getElementById('chatDisplay');
+        const timestamp = new Date().toLocaleTimeString();
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.innerHTML = `<strong>[${timestamp}] ${speaker}:</strong> ${message}`;
+        messageDiv.style.marginBottom = '10px';
+        
+        chatDisplay.appendChild(messageDiv);
+        chatDisplay.scrollTop = chatDisplay.scrollHeight;
+        
+        console.log('Added message:', speaker, message);
     }
     
     generateUUID() {
@@ -39,54 +108,10 @@ class WebRTCChatbot {
             return v.toString(16);
         });
     }
-    
-    // Placeholder methods - will be implemented in next steps
-    async startCall() {
-        this.updateStatus('Starting call...');
-        // WebRTC implementation will go here
-    }
-    
-    endCall() {
-        this.updateStatus('Call ended');
-        // Cleanup implementation will go here
-    }
-    
-    async sendMessage() {
-        const input = document.getElementById('messageInput');
-        const message = input.value.trim();
-        if (!message) return;
-        
-        this.addChatMessage('You', message);
-        input.value = '';
-        
-        // Send via WebRTC data channel or fallback to API
-        // Implementation will go here
-    }
-    
-    addChatMessage(speaker, message, citations = null) {
-        const chatDisplay = document.getElementById('chatDisplay');
-        const timestamp = new Date().toLocaleTimeString();
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'chat-message';
-        messageDiv.innerHTML = `<strong>[${timestamp}] ${speaker}:</strong> ${message}`;
-        
-        if (citations && document.getElementById('showCitations').checked) {
-            const citationsDiv = document.createElement('div');
-            citationsDiv.className = 'citations';
-            citationsDiv.innerHTML = '<strong>📚 Sources:</strong><br>' + 
-                citations.slice(0, 3).map((c, i) => 
-                    `${i+1}. ${c.source.split('/').pop()} (relevance: ${c.score.toFixed(2)})`
-                ).join('<br>');
-            messageDiv.appendChild(citationsDiv);
-        }
-        
-        chatDisplay.appendChild(messageDiv);
-        chatDisplay.scrollTop = chatDisplay.scrollHeight;
-    }
 }
 
-// Initialize the application when DOM is loaded
+// Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing chatbot');
     window.chatbot = new WebRTCChatbot();
 });

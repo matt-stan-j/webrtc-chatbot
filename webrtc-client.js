@@ -2,28 +2,20 @@ class WebRTCChatbot {
     constructor() {
         this.config = window.WEBRTC_CONFIG;
         this.sessionId = this.generateUUID();
+        this.localStream = null;
         this.peerConnection = null;
-        this.dataChannel = null;
-        this.signalingClient = null;
-        this.isConnected = false;
         
         this.setupEventListeners();
-        this.updateStatus('Ready');
+        this.addWebRTCControls();
         console.log('WebRTC Chatbot initialized');
     }
     
     setupEventListeners() {
-        // Wait for DOM to be ready
         document.addEventListener('DOMContentLoaded', () => {
             this.attachEventListeners();
         });
         
-        // If DOM is already loaded
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
-                this.attachEventListeners();
-            });
-        } else {
+        if (document.readyState !== 'loading') {
             this.attachEventListeners();
         }
     }
@@ -32,133 +24,119 @@ class WebRTCChatbot {
         const sendButton = document.getElementById('sendButton');
         const messageInput = document.getElementById('messageInput');
         
-        console.log('Attaching event listeners...');
-        console.log('Send button:', sendButton);
-        console.log('Message input:', messageInput);
-        
-        if (sendButton) {
-            sendButton.addEventListener('click', () => {
-                console.log('Send button clicked');
-                this.sendMessage();
-            });
+        if (sendButton && messageInput) {
+            // Remove existing listeners by cloning elements
+            const newSendButton = sendButton.cloneNode(true);
+            const newMessageInput = messageInput.cloneNode(true);
+            
+            sendButton.parentNode.replaceChild(newSendButton, sendButton);
+            messageInput.parentNode.replaceChild(newMessageInput, messageInput);
+            
+            // Attach single event listeners
+            newSendButton.onclick = () => this.sendMessage();
+            newMessageInput.onkeypress = (e) => {
+                if (e.key === 'Enter') this.sendMessage();
+            };
+            
+            console.log('Chat event listeners attached');
         }
-        
-        if (messageInput) {
-            messageInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    console.log('Enter key pressed');
-                    this.sendMessage();
-                }
-            });
+    }
+    
+    addWebRTCControls() {
+        // Add WebRTC controls if they don't exist
+        if (!document.getElementById('startVideoButton')) {
+            const webrtcControls = document.createElement('div');
+            webrtcControls.innerHTML = `
+                <div style="margin: 20px 0; padding: 15px; border: 2px solid #007bff; border-radius: 10px; background-color: #f8f9fa;">
+                    <h3 style="color: #007bff;">🎥 WebRTC Video Call</h3>
+                    <button id="startVideoButton" style="margin: 5px; padding: 10px; background: #28a745; color: white; border: none; border-radius: 5px;">Start Video</button>
+                    <button id="endVideoButton" style="margin: 5px; padding: 10px; background: #dc3545; color: white; border: none; border-radius: 5px;" disabled>End Video</button>
+                    <div style="display: flex; gap: 10px; margin: 10px 0;">
+                        <video id="localVideo" width="200" height="150" autoplay muted style="border: 2px solid #007bff; border-radius: 5px;"></video>
+                        <video id="remoteVideo" width="200" height="150" autoplay style="border: 2px solid #6c757d; border-radius: 5px;"></video>
+                    </div>
+                    <div id="webrtcStatus" style="font-weight: bold; color: #007bff;">Status: Ready</div>
+                </div>
+            `;
+            
+            document.body.insertBefore(webrtcControls, document.body.firstChild);
+            
+            // Attach WebRTC event listeners
+            document.getElementById('startVideoButton').onclick = () => this.startVideo();
+            document.getElementById('endVideoButton').onclick = () => this.endVideo();
         }
     }
     
     async sendMessage() {
-        console.log('=== SEND MESSAGE CALLED ===');
-        
         const input = document.getElementById('messageInput');
         const message = input ? input.value.trim() : '';
         
-        console.log('Input element:', input);
-        console.log('Message:', message);
+        if (!message) return;
         
-        if (!message) {
-            console.log('Empty message, returning');
-            return;
-        }
-        
-        // Show user message
         this.addChatMessage('You', message);
         input.value = '';
         
-        // Disable send button
-        const sendButton = document.getElementById('sendButton');
-        if (sendButton) {
-            sendButton.disabled = true;
-            sendButton.textContent = 'Sending...';
-        }
-        
         try {
-            const url = `${this.config.API_GATEWAY_URL}/chat`;
-            console.log('Sending request to:', url);
-            
-            const response = await fetch(url, {
+            const response = await fetch(`${this.config.API_GATEWAY_URL}/chat`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     text: message,
-                    session_id: this.sessionId,
-                    webrtc_enabled: this.isConnected
+                    session_id: this.sessionId
                 })
             });
             
-            console.log('Response status:', response.status);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
             const data = await response.json();
-            console.log('Response data:', data);
-            
-            const botMessage = data.message || 'No response received';
-            const citations = data.citations || [];
-            
-            this.addChatMessage('Bot', botMessage, citations);
+            this.addChatMessage('Bot', data.message || 'No response');
             
         } catch (error) {
-            console.error('Send message error:', error);
             this.addChatMessage('System', `Error: ${error.message}`);
-        } finally {
-            // Re-enable send button
-            if (sendButton) {
-                sendButton.disabled = false;
-                sendButton.textContent = 'Send';
-            }
         }
     }
     
-    addChatMessage(speaker, message, citations = null) {
-        const chatDisplay = document.getElementById('chatDisplay');
-        if (!chatDisplay) {
-            console.error('Chat display not found');
-            return;
+    async startVideo() {
+        try {
+            this.localStream = await navigator.mediaDevices.getUserMedia({
+                video: true, audio: true
+            });
+            
+            document.getElementById('localVideo').srcObject = this.localStream;
+            document.getElementById('startVideoButton').disabled = true;
+            document.getElementById('endVideoButton').disabled = false;
+            document.getElementById('webrtcStatus').textContent = 'Status: Video Active';
+            
+            this.addChatMessage('System', '🎥 Video call started');
+            
+        } catch (error) {
+            document.getElementById('webrtcStatus').textContent = 'Error: ' + error.message;
+            this.addChatMessage('System', 'Video error: ' + error.message);
         }
+    }
+    
+    endVideo() {
+        if (this.localStream) {
+            this.localStream.getTracks().forEach(track => track.stop());
+            this.localStream = null;
+        }
+        
+        document.getElementById('localVideo').srcObject = null;
+        document.getElementById('startVideoButton').disabled = false;
+        document.getElementById('endVideoButton').disabled = true;
+        document.getElementById('webrtcStatus').textContent = 'Status: Ready';
+        
+        this.addChatMessage('System', '🛑 Video call ended');
+    }
+    
+    addChatMessage(speaker, message) {
+        const chatDisplay = document.getElementById('chatDisplay');
+        if (!chatDisplay) return;
         
         const timestamp = new Date().toLocaleTimeString();
-        
         const messageDiv = document.createElement('div');
-        messageDiv.className = 'chat-message';
         messageDiv.innerHTML = `<strong>[${timestamp}] ${speaker}:</strong> ${message}`;
-        
-        if (citations && citations.length > 0 && document.getElementById('showCitations')?.checked) {
-            const citationsDiv = document.createElement('div');
-            citationsDiv.className = 'citations';
-            citationsDiv.innerHTML = '<strong>📚 Sources:</strong><br>' + 
-                citations.slice(0, 3).map((c, i) => 
-                    `${i+1}. ${c.source.split('/').pop()} (relevance: ${c.score.toFixed(2)})`
-                ).join('<br>');
-            messageDiv.appendChild(citationsDiv);
-        }
-        
+        messageDiv.style.marginBottom = '10px';
         chatDisplay.appendChild(messageDiv);
         chatDisplay.scrollTop = chatDisplay.scrollHeight;
-        
-        console.log('Added message:', speaker, message);
-    }
-    
-    updateStatus(status) {
-        const statusElement = document.getElementById('connectionStatus');
-        if (statusElement) {
-            statusElement.textContent = `Status: ${status}`;
-        }
-        
-        const sessionElement = document.getElementById('sessionInfo');
-        if (sessionElement) {
-            sessionElement.textContent = `Session: ${this.sessionId.substring(0, 8)}...`;
-        }
     }
     
     generateUUID() {
@@ -169,9 +147,7 @@ class WebRTCChatbot {
     }
 }
 
-// Initialize when DOM is loaded
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, initializing chatbot');
     window.chatbot = new WebRTCChatbot();
 });
-
